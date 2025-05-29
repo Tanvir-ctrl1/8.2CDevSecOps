@@ -1,75 +1,43 @@
-pipeline {
-  agent {
-    docker {
-      image 'node:14-alpine'
-      label ''            // optional: limit to Docker-capable agents
-      args '-u root:root' // optional: run as root for caching/installs
-    }
+node {
+  stage('Checkout') {
+    // grab your code
+    git url: 'https://github.com/Tanvir-ctrl1/8.2CDevSecOps.git', branch: 'main'
   }
 
-  tools {
-    nodejs 'NodeJS_14'    // match this name in Manage Jenkins → Global Tool Config
-  }
-
-  stages {
-    stage('Validate Workspace') {
-      steps {
-        echo "Running inside Docker container:"
-        sh 'node --version && npm --version'
-      }
-    }
-
-    stage('Checkout') {
-      steps {
-        git url: 'https://github.com/Tanvir-ctrl1/8.2CDevSecOps.git', branch: 'main'
-      }
+  // now run everything inside node:14-alpine
+  docker.image('node:14-alpine').inside('-u root:root') {
+    stage('Validate Docker Image') {
+      sh '''
+        echo "Running in Docker:"
+        node --version
+        npm --version
+      '''
     }
 
     stage('Install Dependencies') {
-      steps {
-        withEnv(["PATH+NODE=${tool 'NodeJS_14'}/bin"]) {
-          sh 'npm install'
-        }
-      }
+      sh 'npm ci'
     }
 
     stage('Run Tests') {
-      steps {
-        withEnv(["PATH+NODE=${tool 'NodeJS_14'}/bin"]) {
-          sh 'npm test || true'
-        }
-      }
+      sh 'npm test || true'
     }
 
     stage('Generate Coverage') {
-      steps {
-        withEnv(["PATH+NODE=${tool 'NodeJS_14'}/bin"]) {
-          sh 'npm run coverage || true'
-        }
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'coverage/**', fingerprint: true
-        }
-      }
+      sh 'npm run coverage || true'
+      archiveArtifacts artifacts: 'coverage/**', fingerprint: true
     }
 
     stage('Security Scan') {
-      steps {
-        withEnv(["PATH+NODE=${tool 'NodeJS_14'}/bin"]) {
-          sh 'npm audit --json > npm-audit.json || true'
-        }
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'npm-audit.json', allowEmptyArchive: true
-        }
-      }
+      sh 'npm audit --json > npm-audit.json || true'
+      archiveArtifacts artifacts: 'npm-audit.json', allowEmptyArchive: true
     }
   }
 
-  post {
-    success { echo '✅ Pipeline completed successfully.' }
-    failure { echo '❌ Pipeline failed – check console output.' }
+  // final notifications
+  stage('Done') {
+    // if you want, you can inspect current build result:
+    echo currentBuild.currentResult == 'SUCCESS' 
+      ? '✅ Pipeline completed successfully.' 
+      : '❌ Pipeline failed – check console output.'
   }
 }
