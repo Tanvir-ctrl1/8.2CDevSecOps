@@ -1,7 +1,24 @@
 pipeline {
-  agent any
+  agent {
+    docker {
+      image 'node:14-alpine'
+      label ''            // optional: limit to Docker-capable agents
+      args '-u root:root' // optional: run as root for caching/installs
+    }
+  }
+
+  tools {
+    nodejs 'NodeJS_14'    // match this name in Manage Jenkins → Global Tool Config
+  }
 
   stages {
+    stage('Validate Workspace') {
+      steps {
+        echo "Running inside Docker container:"
+        sh 'node --version && npm --version'
+      }
+    }
+
     stage('Checkout') {
       steps {
         git url: 'https://github.com/Tanvir-ctrl1/8.2CDevSecOps.git', branch: 'main'
@@ -10,24 +27,25 @@ pipeline {
 
     stage('Install Dependencies') {
       steps {
-        sh 'npm install'
+        withEnv(["PATH+NODE=${tool 'NodeJS_14'}/bin"]) {
+          sh 'npm install'
+        }
       }
     }
 
     stage('Run Tests') {
       steps {
-        sh 'npm test || true'
-      }
-      post {
-        always {
-          junit '**/test-results/*.xml'
+        withEnv(["PATH+NODE=${tool 'NodeJS_14'}/bin"]) {
+          sh 'npm test || true'
         }
       }
     }
 
     stage('Generate Coverage') {
       steps {
-        sh 'npm run coverage || true'
+        withEnv(["PATH+NODE=${tool 'NodeJS_14'}/bin"]) {
+          sh 'npm run coverage || true'
+        }
       }
       post {
         always {
@@ -38,8 +56,9 @@ pipeline {
 
     stage('Security Scan') {
       steps {
-        // Inline JSON audit, no package.json change required
-        sh 'npm audit --json > npm-audit.json || true'
+        withEnv(["PATH+NODE=${tool 'NodeJS_14'}/bin"]) {
+          sh 'npm audit --json > npm-audit.json || true'
+        }
       }
       post {
         always {
@@ -50,11 +69,7 @@ pipeline {
   }
 
   post {
-    success {
-      echo '✅ Pipeline completed successfully.'
-    }
-    failure {
-      echo '❌ Pipeline failed — consult the console output and archived logs.'
-    }
+    success { echo '✅ Pipeline completed successfully.' }
+    failure { echo '❌ Pipeline failed – check console output.' }
   }
 }
